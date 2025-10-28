@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Item Game v6 — Persistence + Settings</title>
+<style>
+  :root{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+  html,body{height:100%;margin:0;background:#fff;color:#111}
+  .app{max-width:980px;margin:0 auto;padding:12px;box-sizing:border-box}
+  .header{display:flex;gap:8px;align-items:center;margin-bottom:12px;position:sticky;top:0;background:#fff;padding:10px 12px;z-index:10;border-bottom:1px solid #f0f0f0}
+  .btn{border:1px solid #ddd;padding:8px 12px;background:#fff;cursor:pointer;border-radius:8px}
+  .btn.small{padding:6px 8px;font-size:13px}
+  .btn.active{border-color:#bbb}
+  main{padding:8px}
+  .panel{border:1px solid #eee;padding:10px;border-radius:10px;background:#fff;min-height:120px;margin-bottom:12px}
+  h2{margin:6px 0}
+  .box{border:1px solid #f0f0f0;padding:10px;border-radius:8px;background:#fafafa;margin-bottom:8px}
+  .muted{color:#666;font-size:13px}
+  input,select,textarea{width:100%;padding:8px;border:1px solid #ddd;border-radius:8px;margin:6px 0;box-sizing:border-box}
+  .row{display:flex;gap:8px;align-items:center}
+  .row .col{flex:1}
+  .list{display:flex;flex-direction:column;gap:8px}
+  .card{display:flex;justify-content:space-between;align-items:center;padding:8px;border-radius:8px;border:1px solid #f4f4f4;background:#fff}
+  .controls{display:flex;gap:6px}
+  .inv-list{max-height:320px;overflow:auto;border-top:1px dashed #eee;padding-top:8px;margin-top:8px}
+  .inv-item{display:flex;justify-content:space-between;align-items:center;padding:8px;border-bottom:1px dashed #f6f6f6}
+  .stack-badge{background:#eee;padding:2px 6px;border-radius:6px;margin-left:8px}
+  .popup{position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;padding:12px;z-index:999}
+  .popup .panel{width:100%;max-width:820px;max-height:90vh;overflow:auto}
+  .currency-badges{display:flex;gap:8px;align-items:center;font-size:13px;margin-bottom:8px}
+  .currency-badges button{background:#f3f3f3;border:1px solid #e6e6e6;padding:6px 8px;border-radius:999px;cursor:pointer}
+  .currency-badges .clickable{cursor:pointer}
+  .item-value{font-weight:600;margin-left:8px;font-size:13px}
+  .danger{background:#ffecec;border:1px solid #ffb8b8}
+  @media (max-width:800px){
+    .header{gap:6px;flex-wrap:wrap}
+    .row{flex-direction:column}
+    .panel{padding:8px}
+    .popup .panel{width:95%}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <button id="btnCreate" class="btn active">Create</button>
+    <button id="btnPlay" class="btn">Play</button>
+    <button id="btnTrade" class="btn">Trade</button>
+    <button id="btnSettings" class="btn">Settings</button>
+    <div style="flex:1"></div>
+    <div class="muted">Auto-save ✅ • Settings contains reset</div>
+  </div>
+
+  <main id="main">
+    <div id="leftPanel" class="panel">
+      <h2 id="modeTitle">Create Mode</h2>
+      <div id="modeArea"></div>
+    </div>
+    <div id="rightPanel" class="panel">
+      <h2>Details</h2>
+      <div id="details" class="muted">Select or create things on the left to interact.</div>
+    </div>
+  </main>
+</div>
+
+<div id="modalRoot" style="display:none"></div>
+
+<script>
+/* ===================================================
+   v6 — Persistence + Settings
+   =================================================== */
+
+/* ---------- Storage & State ---------- */
+const STORAGE_KEY = 'item_game_v6';
+let state = { shops: [], lootboxes: [], accounts: [] };
+
+function uid(p=''){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6)+p; }
+
+function save(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e){ alert('Failed to save data: ' + e); } }
+function load(){ try{ const s = localStorage.getItem(STORAGE_KEY); if(s) state = JSON.parse(s); } catch(e){ console.warn('Load failed', e); } }
+load();
+
+/* safe reset helper */
+function resetAllData(){
+  if(!confirm('This will permanently wipe ALL data. Continue?')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  state = { shops: [], lootboxes: [], accounts: [] };
+  // small reload to ensure UI is clean
+  location.reload();
+}
+
+/* ---------- utilities ---------- */
+function fmtVal(n){ const x = Number(n) || 0; return x.toFixed(3); }
+function escapeHtml(s){ if(s===undefined||s===null) return ''; return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
+function escapeAttr(s){ if(s===undefined||s===null) return ''; return String(s).replaceAll('"','&quot;').replaceAll("\n","&#10;"); }
+
+/* ---------- DOM & routing ---------- */
+const leftPanel = document.getElementById('modeArea');
+const details = document.getElementById('details');
+const modalRoot = document.getElementById('modalRoot');
+const btnCreate = document.getElementById('btnCreate');
+const btnPlay = document.getElementById('btnPlay');
+const btnTrade = document.getElementById('btnTrade');
+const btnSettings = document.getElementById('btnSettings');
+const modeTitle = document.getElementById('modeTitle');
+
+let currentMode = 'create';
+btnCreate.addEventListener('click', ()=>switchMode('create'));
+btnPlay.addEventListener('click', ()=>switchMode('play'));
+btnTrade.addEventListener('click', ()=>switchMode('trade'));
+btnSettings.addEventListener('click', ()=>switchMode('settings'));
+
+function switchMode(m){
+  currentMode = m;
+  btnCreate.classList.toggle('active', m==='create');
+  btnPlay.classList.toggle('active', m==='play');
+  btnTrade.classList.toggle('active', m==='trade');
+  btnSettings.classList.toggle('active', m==='settings');
+  modeTitle.textContent = (m[0].toUpperCase()+m.slice(1)) + ' Mode';
+  renderMode();
+  details.innerHTML = '<div class="muted">Select or create on the left. Details appear here.</div>';
+}
+
+/* ---------- modal helpers ---------- */
+function showModal(html, onshow){
+  modalRoot.style.display = 'block';
+  modalRoot.innerHTML = `<div class="popup"><div class="panel">${html}</div></div>`;
+  onshow?.();
+}
+function closeModal(){ modalRoot.innerHTML=''; modalRoot.style.display='none'; }
+
+/* ---------- CREATE MODE (unchanged behavior, editable items) ---------- */
+function renderCreate(){
+  leftPanel.innerHTML = `
+    <div class="box">
+      <h3>Create Sub Shop</h3>
+      <input id="newShopName" placeholder="Sub Shop name" />
+      <button id="createShopBtn" class="btn">Create Sub Shop</button>
+    </div>
+
+    <div class="box">
+      <h3>Create Loot Box</h3>
+      <input id="newLootName" placeholder="Loot Box name" />
+      <input id="newLootCost" type="number" placeholder="Cost (0 if free)" />
+      <select id="newLootCurrency"><option value="money">Money</option><option value="stars">Stars</option><option value="tokens">Event Tokens</option></select>
+      <button id="createLootBtn" class="btn">Create Loot Box</button>
+    </div>
+
+    <h3>Sub Shops</h3><div id="shopsList" class="list"></div>
+    <h3>Loot Boxes</h3><div id="lootList" class="list"></div>
+    <div style="margin-top:10px" class="muted">Tip: Edit items to update existing inventory copies (link-by-name).</div>
+  `;
+
+  document.getElementById('createShopBtn').addEventListener('click', ()=>{
+    const name = document.getElementById('newShopName').value.trim();
+    if(!name){ alert('Enter a shop name'); return; }
+    state.shops.push({ id: uid('shop'), name, active: true, items: [] });
+    save(); renderCreate();
+  });
+
+  document.getElementById('createLootBtn').addEventListener('click', ()=>{
+    const name = document.getElementById('newLootName').value.trim();
+    if(!name){ alert('Enter a lootbox name'); return; }
+    const cost = Math.max(0, Number(document.getElementById('newLootCost').value) || 0);
+    const currency = document.getElementById('newLootCurrency').value;
+    state.lootboxes.push({ id: uid('loot'), name, cost, currency, active: true, items: [] });
+    save(); renderCreate();
+  });
+
+  const shopsList = document.getElementById('shopsList'); shopsList.innerHTML = '';
+  state.shops.forEach(shop=>{
+    const el = document.createElement('div'); el.className='card';
+    el.innerHTML = `<div><strong>${escapeHtml(shop.name)}</strong><div class="muted">${shop.items.length} items</div></div>
+      <div class="controls">
+        <button class="btn small" data-editshop="${shop.id}">Edit</button>
+        <button class="btn small" data-delshop="${shop.id}">Delete</button>
+        <button class="btn small" data-toggleshop="${shop.id}">${shop.active? 'Active' : 'Inactive'}</button>
+      </div>`;
+    shopsList.appendChild(el);
+  });
+  shopsList.querySelectorAll('[data-editshop]').forEach(b=>b.addEventListener('click', e=>openEditShop(e.target.dataset.editshop)));
+  shopsList.querySelectorAll('[data-delshop]').forEach(b=>b.addEventListener('click', e=>{ if(confirm('Delete shop?')){ state.shops = state.shops.filter(s=>s.id!==e.target.dataset.delshop); save(); renderCreate(); }}));
+  shopsList.querySelectorAll('[data-toggleshop]').forEach(b=>b.addEventListener('click', e=>{ const id = e.target.dataset.toggleshop; const s = state.shops.find(x=>x.id===id); if(s){ s.active=!s.active; save(); renderCreate(); }}));
+
+  const lootList = document.getElementById('lootList'); lootList.innerHTML = '';
+  state.lootboxes.forEach(lb=>{
+    const el = document.createElement('div'); el.className='card';
+    el.innerHTML = `<div><strong>${escapeHtml(lb.name)}</strong><div class="muted">Cost: ${lb.cost} ${lb.currency} • ${lb.items.length} items</div></div>
+      <div class="controls">
+        <button class="btn small" data-editloot="${lb.id}">Edit</button>
+        <button class="btn small" data-delloot="${lb.id}">Delete</button>
+        <button class="btn small" data-toggleloot="${lb.id}">${lb.active? 'Active' : 'Inactive'}</button>
+      </div>`;
+    lootList.appendChild(el);
+  });
+  lootList.querySelectorAll('[data-editloot]').forEach(b=>b.addEventListener('click', e=>openEditLoot(e.target.dataset.editloot)));
+  lootList.querySelectorAll('[data-delloot]').forEach(b=>b.addEventListener('click', e=>{ if(confirm('Delete lootbox?')){ state.lootboxes = state.lootboxes.filter(l=>l.id!==e.target.dataset.delloot); save(); renderCreate(); }}));
+  lootList.querySelectorAll('[data-toggleloot]').forEach(b=>b.addEventListener('click', e=>{ const id = e.target.dataset.toggleloot; const l = state.lootboxes.find(x=>x.id===id); if(l){ l.active=!l.active; save(); renderCreate(); }}));
+}
+
+/* ---------- Shop item editing (propagate by name) ---------- */
+function openEditShop(shopId){
+  const shop = state.shops.find(s=>s.id===shopId); if(!shop) return;
+  const html = `<h3>Edit Shop — ${escapeHtml(shop.name)}</h3>
+    <div class="box"><input id="editShopName" value="${escapeAttr(shop.name)}" /><button id="saveShopName" class="btn">Save name</button></div>
+    <div class="box"><h4>Add Item</h4><input id="itemName" placeholder="Item name" /><textarea id="itemDesc" placeholder="Description"></textarea><input id="itemPrice" type="number" placeholder="Price (cost)" /><input id="itemValue" type="number" placeholder="Value (decimal OK)" /><select id="itemCurrency"><option value="money">Money</option><option value="stars">Stars</option><option value="tokens">Event Tokens</option></select><button id="addShopItem" class="btn">Add item</button></div>
+    <h4>Items</h4><div id="shopItems" class="inv-list"></div><div style="margin-top:8px"><button id="closeEdit" class="btn">Close</button></div>`;
+  showModal(html, ()=>{
+    document.getElementById('saveShopName').addEventListener('click', ()=>{
+      const newName = document.getElementById('editShopName').value.trim(); if(!newName) return alert('Name required');
+      shop.name = newName; save(); closeModal(); renderCreate();
+    });
+
+    document.getElementById('addShopItem').addEventListener('click', ()=>{
+      const name = document.getElementById('itemName').value.trim(); if(!name) return alert('Item name required');
+      const it = { id: uid('it'), name, desc: document.getElementById('itemDesc').value.trim(), price: Number(document.getElementById('itemPrice').value)||0, value: Number(document.getElementById('itemValue').value)||0, currency: document.getElementById('itemCurrency').value };
+      shop.items.push(it); save(); renderShopItems();
+      document.getElementById('itemName').value=''; document.getElementById('itemDesc').value=''; document.getElementById('itemPrice').value=''; document.getElementById('itemValue').value='';
+    });
+
+    function renderShopItems(){
+      const area = document.getElementById('shopItems'); area.innerHTML='';
+      shop.items.forEach(it=>{
+        const r = document.createElement('div'); r.className='inv-item';
+        r.innerHTML = `<div><strong>${escapeHtml(it.name)}</strong><div class="muted">${escapeHtml(it.desc||'')}</div><div class="muted">Value: ${fmtVal(it.value)}</div></div>
+          <div class="controls"><div class="muted">${it.price} ${it.currency}</div><button class="btn small" data-editit="${it.id}">Edit</button><button class="btn small" data-delit="${it.id}">Del</button></div>`;
+        area.appendChild(r);
+      });
+      area.querySelectorAll('[data-delit]').forEach(b=>b.addEventListener('click', e=>{
+        if(!confirm('Delete item?')) return;
+        shop.items = shop.items.filter(x=>x.id !== e.target.dataset.delit); save(); renderShopItems();
+      }));
+      area.querySelectorAll('[data-editit]').forEach(b=>b.addEventListener('click', e=>openEditShopItem(shop, e.target.dataset.editit)));
+    }
+    renderShopItems();
+
+    document.getElementById('closeEdit').addEventListener('click', ()=>{ closeModal(); renderCreate(); });
+  });
+}
+
+function openEditShopItem(shop, itemId){
+  const item = shop.items.find(i=>i.id===itemId); if(!item) return;
+  const oldName = item.name;
+  const html = `<h3>Edit Item — ${escapeHtml(item.name)}</h3>
+    <div class="box"><input id="eiName" value="${escapeAttr(item.name)}" /><textarea id="eiDesc">${escapeAttr(item.desc||'')}</textarea><input id="eiPrice" type="number" value="${item.price||0}" /><input id="eiValue" type="number" value="${item.value||0}" /><select id="eiCurrency"><option value="money">Money</option><option value="stars">Stars</option><option value="tokens">Event Tokens</option></select><div style="margin-top:8px"><button id="saveEi" class="btn">Save</button> <button id="delEi" class="btn">Delete</button> <button id="closeEi" class="btn">Close</button></div></div>`;
+  showModal(html, ()=>{
+    document.getElementById('eiCurrency').value = item.currency || 'money';
+    document.getElementById('saveEi').addEventListener('click', ()=>{
+      const newName = document.getElementById('eiName').value.trim(); if(!newName) return alert('Name required');
+      item.name = newName;
+      item.desc = document.getElementById('eiDesc').value.trim();
+      item.price = Number(document.getElementById('eiPrice').value)||0;
+      item.value = Number(document.getElementById('eiValue').value)||0;
+      item.currency = document.getElementById('eiCurrency').value;
+      // propagate by name to accounts
+      state.accounts.forEach(acc=>{
+        acc.inventory.forEach(inv=>{
+          if(inv.name === oldName){
+            inv.name = item.name;
+            inv.desc = item.desc;
+            inv.value = item.value;
+          }
+        });
+      });
+      save(); closeModal(); renderCreate();
+    });
+    document.getElementById('delEi').addEventListener('click', ()=>{ if(!confirm('Delete this item from shop? Inventory copies remain.')) return; shop.items = shop.items.filter(i=>i.id!==item.id); save(); closeModal(); renderCreate(); });
+    document.getElementById('closeEi').addEventListener('click', ()=>closeModal());
+  });
+}
+
+/* ---------- Lootbox editing ---------- */
+function openEditLoot(lootId){
+  const box = state.lootboxes.find(l=>l.id===lootId); if(!box) return;
+  const html = `<h3>Edit Loot Box — ${escapeHtml(box.name)}</h3>
+    <div class="box"><input id="editLootName" value="${escapeAttr(box.name)}" /><input id="editLootCost" type="number" value="${box.cost||0}" /><select id="editLootCurrency"><option value="money">Money</option><option value="stars">Stars</option><option value="tokens">Event Tokens</option></select><button id="saveLootMeta" class="btn">Save</button></div>
+    <div class="box"><h4>Add Loot Item</h4><input id="lbItemName" placeholder="Item name" /><textarea id="lbItemDesc" placeholder="Description"></textarea><input id="lbItemChance" type="number" placeholder="Chance %" /><input id="lbItemValue" type="number" placeholder="Value" /><button id="addLbItem" class="btn">Add loot item</button></div>
+    <h4>Items</h4><div id="lootItems" class="inv-list"></div><div style="margin-top:8px"><button id="closeLoot" class="btn">Close</button></div>`;
+  showModal(html, ()=>{
+    document.getElementById('editLootCurrency').value = box.currency || 'money';
+    document.getElementById('saveLootMeta').addEventListener('click', ()=>{ box.name = document.getElementById('editLootName').value.trim() || box.name; box.cost = Math.max(0, Number(document.getElementById('editLootCost').value)||0); box.currency = document.getElementById('editLootCurrency').value; save(); renderCreate(); alert('Saved'); });
+    document.getElementById('addLbItem').addEventListener('click', ()=>{
+      const name = document.getElementById('lbItemName').value.trim(); const chance = Number(document.getElementById('lbItemChance').value)||0;
+      if(!name) return alert('Name required'); if(chance<0||chance>100) return alert('Chance 0-100');
+      box.items.push({ id: uid('li'), name, desc: document.getElementById('lbItemDesc').value.trim(), chance, value: Number(document.getElementById('lbItemValue').value)||0 });
+      save(); renderLootItems();
+      document.getElementById('lbItemName').value=''; document.getElementById('lbItemDesc').value=''; document.getElementById('lbItemChance').value=''; document.getElementById('lbItemValue').value='';
+    });
+
+    function renderLootItems(){
+      const area = document.getElementById('lootItems'); area.innerHTML='';
+      box.items.forEach(it=>{
+        const r = document.createElement('div'); r.className='inv-item';
+        r.innerHTML = `<div><strong>${escapeHtml(it.name)}</strong><div class="muted">${escapeHtml(it.desc||'')}</div><div class="muted">Value: ${fmtVal(it.value)}</div></div>
+          <div class="controls"><div class="muted">${it.chance}%</div><button class="btn small" data-editli="${it.id}">Edit</button><button class="btn small" data-delli="${it.id}">Del</button></div>`;
+        area.appendChild(r);
+      });
+      area.querySelectorAll('[data-delli]').forEach(b=>b.addEventListener('click', e=>{ if(!confirm('Delete loot item?')) return; box.items = box.items.filter(x=>x.id!==e.target.dataset.delli); save(); renderLootItems(); }));
+      area.querySelectorAll('[data-editli]').forEach(b=>b.addEventListener('click', e=>openEditLootItem(box, e.target.dataset.editli)));
+    }
+    renderLootItems();
+
+    document.getElementById('closeLoot').addEventListener('click', ()=>{ closeModal(); renderCreate(); });
+  });
+}
+
+function openEditLootItem(box, liId){
+  const it = box.items.find(x=>x.id===liId); if(!it) return;
+  const oldName = it.name;
+  const html = `<h3>Edit Loot Item — ${escapeHtml(it.name)}</h3><div class="box"><input id="liName" value="${escapeAttr(it.name)}" /><textarea id="liDesc">${escapeAttr(it.desc||'')}</textarea><input id="liChance" type="number" value="${it.chance||0}" /><input id="liValue" type="number" value="${it.value||0}" /><div style="margin-top:8px"><button id="saveLi" class="btn">Save</button> <button id="delLi" class="btn">Delete</button> <button id="closeLi" class="btn">Close</button></div></div>`;
+  showModal(html, ()=>{
+    document.getElementById('saveLi').addEventListener('click', ()=>{
+      const newName = document.getElementById('liName').value.trim(); if(!newName) return alert('Name required');
+      it.name = newName; it.desc = document.getElementById('liDesc').value.trim(); it.chance = Math.max(0, Number(document.getElementById('liChance').value)||0); it.value = Number(document.getElementById('liValue').value)||0;
+      // propagate to accounts by name
+      state.accounts.forEach(acc=>{ acc.inventory.forEach(inv=>{ if(inv.name === oldName){ inv.name = it.name; inv.desc = it.desc; inv.value = it.value; } }); });
+      save(); closeModal(); renderCreate();
+    });
+    document.getElementById('delLi').addEventListener('click', ()=>{ if(!confirm('Delete loot item?')) return; box.items = box.items.filter(x=>x.id!==it.id); save(); closeModal(); renderCreate(); });
+    document.getElementById('closeLi').addEventListener('click', ()=>closeModal());
+  });
+}
+
+/* ---------- Play Mode & Inventory ---------- */
+function renderPlay(){
+  leftPanel.innerHTML = `
+    <div class="box">
+      <h3>Create Account</h3>
+      <input id="accName" placeholder="Account name" />
+      <input id="accMoney" type="number" placeholder="Starting Money" />
+      <input id="accStars" type="number" placeholder="Starting Stars" />
+      <input id="accTokens" type="number" placeholder="Starting Event Tokens" />
+      <button id="createAcc" class="btn">Create Account</button>
+    </div>
+    <h3>Accounts</h3>
+    <div id="accountsList" class="list"></div>
+  `;
+  document.getElementById('createAcc').addEventListener('click', ()=>{
+    const name = document.getElementById('accName').value.trim(); if(!name) return alert('Enter a name');
+    state.accounts.push({ id: uid('acc'), name, currencies: { money: Math.max(0,Number(document.getElementById('accMoney').value)||0), stars: Math.max(0,Number(document.getElementById('accStars').value)||0), tokens: Math.max(0,Number(document.getElementById('accTokens').value)||0) }, inventory: [] });
+    save(); renderPlay();
+  });
+  renderAccountsList();
+}
+
+function renderAccountsList(){
+  const list = document.getElementById('accountsList'); list.innerHTML='';
+  state.accounts.forEach(acc=>{
+    const totalValue = computeAccountValue(acc);
+    const el = document.createElement('div'); el.className='card';
+    el.innerHTML = `<div><strong>${escapeHtml(acc.name)}</strong><div class="muted">Total value: ${fmtVal(totalValue)}</div></div>
+      <div class="controls"><button class="btn small" data-play="${acc.id}">Play</button><button class="btn small" data-del="${acc.id}">Delete</button></div>`;
+    list.appendChild(el);
+  });
+  list.querySelectorAll('[data-play]').forEach(b=>b.addEventListener('click', e=>openAccount(e.target.dataset.play)));
+  list.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click', e=>{ if(confirm('Delete account?')){ state.accounts = state.accounts.filter(a=>a.id!==e.target.dataset.del); save(); renderPlay(); }}));
+}
+
+function computeAccountValue(acc){
+  let total = 0;
+  acc.inventory.forEach(it=>{ total += (Number(it.value)||0) * (it.qty || 1); });
+  return total;
+}
+
+function openAccount(accId){
+  const acc = state.accounts.find(a=>a.id===accId); if(!acc) return;
+  const totalValue = computeAccountValue(acc);
+  leftPanel.innerHTML = `
+    <div class="box">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3 style="margin:0">${escapeHtml(acc.name)}</h3>
+        <div class="muted">Total value: ${fmtVal(totalValue)}</div>
+      </div>
+      <div class="currency-badges" style="margin-top:8px">
+        <button class="clickable" id="c_money">💰 ${acc.currencies.money}</button>
+        <button class="clickable" id="c_stars">⭐ ${acc.currencies.stars}</button>
+        <button class="clickable" id="c_tokens">🎟️ ${acc.currencies.tokens}</button>
+      </div>
+      <div class="controls" style="margin-top:8px">
+        <button id="openShop" class="btn">Open Shop</button>
+        <button id="openLoots" class="btn">Open Lootboxes</button>
+        <button id="manageInv" class="btn">🗑 Manage Inventory</button>
+        <button id="backBtn" class="btn">Back</button>
+      </div>
+    </div>
+    <h4>Inventory</h4>
+    <div id="invArea" class="inv-list"></div>
+  `;
+  const invArea = document.getElementById('invArea');
+  const collapsed = collapseInventory(acc.inventory);
+  if(collapsed.length===0) invArea.innerHTML = '<div class="muted">No items</div>';
+  else{
+    invArea.innerHTML = '';
+    collapsed.forEach(it=>{
+      const div = document.createElement('div'); div.className='card';
+      const leftHtml = `<div><strong>${escapeHtml(it.name)}</strong> <span class="item-value">${fmtVal(it.value)}</span>${it.qty>1?'<span class="stack-badge">'+it.qty+'x</span>':''}<div class="muted">${escapeHtml(it.desc||'')}</div></div>`;
+      const rightHtml = `<div class="controls">${it.type==='lootbox'?`<button class="btn small" data-open="${it.ref}">Open</button>`:''}</div>`;
+      div.innerHTML = leftHtml + rightHtml;
+      invArea.appendChild(div);
+    });
+    invArea.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click', e=>{ const ref = e.target.dataset.open; openInventoryLootbox(acc, ref); }));
+  }
+
+  // currency popup
+  document.getElementById('c_money').addEventListener('click', ()=>currencyPopup(acc, 'money'));
+  document.getElementById('c_stars').addEventListener('click', ()=>currencyPopup(acc, 'stars'));
+  document.getElementById('c_tokens').addEventListener('click', ()=>currencyPopup(acc, 'tokens'));
+
+  document.getElementById('openShop').addEventListener('click', ()=>openShopForAccount(acc));
+  document.getElementById('openLoots').addEventListener('click', ()=>openLootboxShopForAccount(acc));
+  document.getElementById('manageInv').addEventListener('click', ()=>openManageInventory(acc));
+  document.getElementById('backBtn').addEventListener('click', ()=>renderPlay());
+}
+
+/* ---------- currency popup (add/subtract) ---------- */
+function currencyPopup(acc, key){
+  const html = `<h3>Edit ${key} — ${escapeHtml(acc.name)}</h3>
+    <div class="box"><input id="chgVal" type="number" placeholder="Amount" /><div style="margin-top:8px" class="controls"><button id="doAdd" class="btn">➕ Add</button><button id="doSub" class="btn">➖ Subtract</button><button id="closeCur" class="btn">Close</button></div></div>`;
+  showModal(html, ()=>{
+    document.getElementById('doAdd').addEventListener('click', ()=>{
+      const v = Number(document.getElementById('chgVal').value) || 0;
+      acc.currencies[key] = (Number(acc.currencies[key]) || 0) + v;
+      save(); closeModal(); openAccount(acc.id);
+    });
+    document.getElementById('doSub').addEventListener('click', ()=>{
+      const v = Number(document.getElementById('chgVal').value) || 0;
+      acc.currencies[key] = Math.max(0, (Number(acc.currencies[key]) || 0) - v);
+      save(); closeModal(); openAccount(acc.id);
+    });
+    document.getElementById('closeCur').addEventListener('click', ()=>closeModal());
+  });
+}
+
+/* ---------- Shop & Lootbox buying ---------- */
+function openShopForAccount(acc){
+  const activeShops = state.shops.filter(s=>s.active);
+  const html = `<h3>Shop — ${escapeHtml(acc.name)}</h3>
+    ${activeShops.map(s=>`<div class="box"><strong>${escapeHtml(s.name)}</strong>${s.items.length? s.items.map(it=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0"><div><strong>${escapeHtml(it.name)}</strong> <span class="item-value">${fmtVal(it.value)}</span><div class="muted">${escapeHtml(it.desc||'')}</div><div class="muted">Cost: ${it.price} ${it.currency}</div></div><div><button data-buy="${s.id}|${it.id}" class="btn small">Buy</button></div></div>`).join(''): '<div class="muted">No items</div>'}</div>`).join('') || '<div class="muted">No active shops</div>'}
+    <div style="margin-top:8px"><button id="closeShop" class="btn">Close</button></div>`;
+  showModal(html, ()=>{
+    modalRoot.querySelectorAll('[data-buy]').forEach(b=>b.addEventListener('click', e=>{
+      const [shopId, itemId] = e.target.dataset.buy.split('|'); const shop = state.shops.find(s=>s.id===shopId); const it = shop?.items.find(x=>x.id===itemId);
+      if(!it) return alert('Missing item'); const currency = it.currency||'money'; const price = Number(it.price)||0;
+      if(acc.currencies[currency] < price) return alert('Not enough '+currency);
+      acc.currencies[currency] -= price;
+      addToInventory(acc, { ref: it.id, name: it.name, desc: it.desc, value: it.value||0, type: 'item', sourceId: shop.id, qty: 1 });
+      save(); closeModal(); openAccount(acc.id);
+    }));
+    document.getElementById('closeShop').addEventListener('click', ()=>closeModal());
+  });
+}
+
+function openLootboxShopForAccount(acc){
+  const active = state.lootboxes.filter(l=>l.active);
+  const html = `<h3>Lootboxes — ${escapeHtml(acc.name)}</h3>
+    ${active.map(lb=>`<div class="box"><strong>${escapeHtml(lb.name)}</strong><div class="muted">Cost: ${lb.cost} ${lb.currency} • ${lb.items.length} items</div><div style="margin-top:6px"><button data-buyloot="${lb.id}" class="btn">Buy Lootbox</button></div></div>`).join('') || '<div class="muted">No active lootboxes</div>'}
+    <div style="margin-top:8px"><button id="closeLoot" class="btn">Close</button></div>`;
+  showModal(html, ()=>{
+    modalRoot.querySelectorAll('[data-buyloot]').forEach(b=>b.addEventListener('click', e=>{
+      const id = e.target.dataset.buyloot; const lb = state.lootboxes.find(x=>x.id===id); if(!lb) return;
+      if(acc.currencies[lb.currency] < lb.cost) return alert('Not enough '+lb.currency);
+      acc.currencies[lb.currency] -= lb.cost;
+      addToInventory(acc, { ref: lb.id, name: 'Lootbox: '+lb.name, desc: '', value: lb.value||0, type: 'lootbox', sourceId: lb.id, qty: 1 });
+      save(); closeModal(); openAccount(acc.id);
+    }));
+    document.getElementById('closeLoot').addEventListener('click', ()=>closeModal());
+  });
+}
+
+/* ---------- Open lootbox from inventory ---------- */
+function openInventoryLootbox(acc, ref){
+  const box = state.lootboxes.find(l=>l.id===ref); if(!box) return alert('Lootbox source missing');
+  if(!box.items || box.items.length===0) return alert('Lootbox empty');
+  const invIndex = acc.inventory.findIndex(it=>it.ref===ref && it.type==='lootbox');
+  if(invIndex===-1) return alert('Lootbox not found in inventory');
+  const total = box.items.reduce((s,i)=>s + (Number(i.chance)||0), 0) || 100;
+  let r = Math.random()*total, c=0, chosen=null;
+  for(const it of box.items){ c += Number(it.chance)||0; if(r <= c){ chosen = it; break; } }
+  if(!chosen) chosen = box.items[box.items.length-1];
+  if(acc.inventory[invIndex].qty > 1) acc.inventory[invIndex].qty -= 1; else acc.inventory.splice(invIndex,1);
+  addToInventory(acc, { ref: chosen.id, name: chosen.name, desc: chosen.desc, value: chosen.value||0, type: 'item', sourceId: box.id, qty: 1 });
+  save(); alert('Opened lootbox and found: ' + chosen.name); openAccount(acc.id);
+}
+
+/* ---------- Inventory helpers & manage inventory ---------- */
+function addToInventory(acc, item){
+  item.qty = item.qty || 1;
+  const found = acc.inventory.find(x=>x.ref===item.ref && x.type===item.type && x.sourceId===item.sourceId);
+  if(found){ found.qty += item.qty; } else { acc.inventory.push(Object.assign({}, item)); }
+  save();
+}
+function collapseInventory(inv){
+  const map = {};
+  inv.forEach(it=>{
+    const key = `${it.type}|${it.ref}|${it.sourceId||''}|${it.name}`;
+    if(!map[key]) map[key] = { ref: it.ref, name: it.name, desc: it.desc, value: it.value, type: it.type, sourceId: it.sourceId, qty: 0 };
+    map[key].qty += it.qty || 1;
+  });
+  const arr = Object.values(map); arr.sort((a,b)=>a.name.localeCompare(b.name));
+  return arr;
+}
+function openManageInventory(acc){
+  const rows = [];
+  acc.inventory.forEach((inv, idx)=>{
+    const qty = inv.qty || 1;
+    for(let k=0;k<qty;k++){
+      rows.push({ invIndex: idx, displayName: inv.name, ref: inv.ref, desc: inv.desc||'', sourceId: inv.sourceId });
+    }
+  });
+  if(rows.length===0){ alert('No items to manage'); return; }
+  let html = `<h3>Manage Inventory — ${escapeHtml(acc.name)}</h3><div id="manageList" style="max-height:60vh;overflow:auto">`;
+  rows.forEach((r,i)=>{ html += `<div class="inv-item"><label><input type="checkbox" data-row="${i}" /> <strong>${escapeHtml(r.displayName)}</strong><div class="muted">${escapeHtml(r.desc)}</div></label></div>`; });
+  html += `</div><div style="margin-top:8px" class="controls"><button id="deleteSelected" class="btn danger">Delete Selected</button><button id="closeManage" class="btn">Close</button></div>`;
+  showModal(html, ()=>{
+    document.getElementById('deleteSelected').addEventListener('click', ()=>{
+      const checked = Array.from(modalRoot.querySelectorAll('#manageList input[type=checkbox]:checked')).map(ch=>Number(ch.dataset.row));
+      if(checked.length===0) return alert('No items selected');
+      if(!confirm('Delete '+checked.length+' item(s)?')) return;
+      checked.sort((a,b)=>b-a);
+      checked.forEach(rowIdx=>{
+        const row = rows[rowIdx]; const invIdx = row.invIndex;
+        if(!acc.inventory[invIdx]) return;
+        if(acc.inventory[invIdx].qty > 1) acc.inventory[invIdx].qty -= 1; else acc.inventory.splice(invIdx,1);
+      });
+      save(); closeModal(); openAccount(acc.id);
+    });
+    document.getElementById('closeManage').addEventListener('click', ()=>closeModal());
+  });
+}
+
+/* ---------- Settings mode (reset) ---------- */
+function renderSettings(){
+  leftPanel.innerHTML = `
+    <div class="box">
+      <h3>Settings</h3>
+      <div class="muted">Danger zone — Reset all data is hidden here to prevent accidents.</div>
+      <div style="margin-top:8px">
+        <label>Type <strong>RESET</strong> below to enable the button:</label>
+        <input id="confirmReset" placeholder="Type RESET to enable" />
+        <div style="margin-top:8px">
+          <button id="doReset" class="btn" disabled>Reset All Data</button>
+        </div>
+        <div style="margin-top:8px" class="muted">Reset will permanently delete all shops, lootboxes, accounts, and inventories from localStorage.</div>
+      </div>
+    </div>
+  `;
+  const confirmInput = document.getElementById('confirmReset');
+  const doBtn = document.getElementById('doReset');
+  confirmInput.addEventListener('input', ()=>{
+    doBtn.disabled = confirmInput.value.trim().toUpperCase() !== 'RESET';
+  });
+  doBtn.addEventListener('click', ()=>{
+    if(!confirm('Final confirmation: wipe ALL data and reload?')) return;
+    localStorage.removeItem(STORAGE_KEY);
+    state = { shops: [], lootboxes: [], accounts: [] };
+    save();
+    location.reload();
+  });
+  // right panel shows current storage size and a quick export/import option
+  const right = document.getElementById('details');
+  right.innerHTML = `<div class="muted">Storage key: ${STORAGE_KEY}</div>
+    <div style="margin-top:8px"><button id="exportBtn" class="btn small">Export JSON</button> <button id="importBtn" class="btn small">Import JSON</button></div>
+    <div style="margin-top:8px" class="muted">Export lets you download the current data. Import will replace current data (use carefully).</div>`;
+  document.getElementById('exportBtn').addEventListener('click', ()=>{
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'itemgame_export.json'; a.click(); URL.revokeObjectURL(url);
+  });
+  document.getElementById('importBtn').addEventListener('click', ()=>{
+    const html = `<h3>Import JSON</h3><div class="box"><input id="jsonFile" type="file" accept=".json" /></div><div class="controls"><button id="doImport" class="btn">Import</button><button id="closeImp" class="btn">Close</button></div>`;
+    showModal(html, ()=>{
+      document.getElementById('closeImp').addEventListener('click', ()=>closeModal());
+      document.getElementById('doImport').addEventListener('click', ()=>{
+        const f = document.getElementById('jsonFile').files[0]; if(!f) return alert('Choose a file');
+        const r = new FileReader(); r.onload = ()=>{ try{ const obj = JSON.parse(r.result); if(!confirm('This will replace current data. Continue?')) return; state = obj; save(); closeModal(); location.reload(); } catch(e){ alert('Invalid JSON'); } }; r.readAsText(f);
+      });
+    });
+  });
+}
+
+/* ---------- routing ---------- */
+function renderMode(){ if(currentMode==='create') renderCreate(); else if(currentMode==='play') renderPlay(); else if(currentMode==='settings') renderSettings(); else { leftPanel.innerHTML = '<div class="muted">Trade mode coming soon</div>'; details.innerHTML = '<div class="muted">Trade mode planned next</div>'; } }
+
+/* ---------- initial render ---------- */
+renderMode();
+
+</script>
+</body>
+</html>
