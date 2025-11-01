@@ -1,0 +1,687 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Item Collector — Shops & Gachas + Accounts (Fixed)</title>
+<style>
+  :root{--border:#e6e6e6;--text:#111}
+  html,body{height:100%;margin:0;padding:0;background:white;color:var(--text);font-family:Inter, Arial, system-ui}
+  .app{max-width:980px;margin:0 auto;padding:12px;box-sizing:border-box}
+  header{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  h1{font-size:18px;margin:0}
+  .tabs{display:flex;gap:8px;flex-wrap:wrap}
+  .tab{background:#fff;border:1px solid var(--border);padding:8px 12px;border-radius:8px;cursor:pointer}
+  .tab.active{box-shadow:0 0 0 3px rgba(0,0,0,0.03) inset}
+  main{display:flex;gap:12px;margin-top:12px}
+  .col{flex:1;min-width:280px}
+  .panel{background:#fff;border:1px solid var(--border);padding:12px;border-radius:10px;margin-bottom:12px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  input,select,textarea,button{font-size:15px}
+  input,select,textarea{padding:8px;border:1px solid var(--border);border-radius:8px;width:100%;box-sizing:border-box}
+  button{padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:white;cursor:pointer}
+  .list{max-height:360px;overflow:auto}
+  .boxed{border:1px solid var(--border);padding:10px;border-radius:8px;background:white;margin-bottom:8px}
+  .muted{color:#666;font-size:13px}
+  .currency{padding:8px;border-radius:8px;border:1px solid var(--border);min-width:92px;text-align:center;cursor:pointer}
+  .modal-back{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;z-index:9999;padding:10px}
+  .modal{width:100%;max-width:720px;background:white;padding:14px;border-radius:10px;border:1px solid var(--border);max-height:90vh;overflow:auto}
+  @media (max-width:900px){ main{flex-direction:column} .app{padding:10px} }
+  html,body{overflow-x:hidden}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <h1>Item Collector</h1>
+      <div class="muted">White boxes, mobile friendly — items live under shop/gacha edit</div>
+    </div>
+    <div style="flex:1"></div>
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-tab="create">Create</button>
+      <button class="tab" data-tab="play">Play</button>
+      <button class="tab" data-tab="trade">Trade</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="col">
+      <!-- CREATE MODE -->
+      <section id="createPanel" class="panel">
+        <h2 style="margin-top:0">Create Mode</h2>
+
+        <div class="panel boxed">
+          <strong>New Shop</strong>
+          <div class="row" style="margin-top:8px">
+            <input id="newShopName" placeholder="Shop name">
+            <button id="createShopBtn">Create</button>
+          </div>
+        </div>
+
+        <div class="panel boxed">
+          <strong>New Gacha</strong>
+          <div class="row" style="margin-top:8px">
+            <input id="newGachaName" placeholder="Gacha name">
+            <input id="newGachaPrice1" type="number" placeholder="1-roll" style="width:120px">
+            <input id="newGachaPrice5" type="number" placeholder="5-roll" style="width:120px">
+            <select id="newGachaCurrency" style="width:120px">
+              <option value="coins">coins</option>
+              <option value="stars">stars</option>
+              <option value="tickets">tickets</option>
+            </select>
+            <button id="createGachaBtn">Create</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>Shops</h3>
+          <div id="shopsList" class="list"></div>
+        </div>
+
+        <div class="panel">
+          <h3>Gachas</h3>
+          <div id="gachasList" class="list"></div>
+        </div>
+
+        <div id="editorArea"></div>
+      </section>
+
+      <!-- PLAY MODE -->
+      <section id="playPanel" class="panel" style="display:none">
+        <h2 style="margin-top:0">Play Mode</h2>
+        <div class="panel boxed">
+          <strong>Create Account</strong>
+          <div class="row" style="margin-top:8px">
+            <input id="accName" placeholder="Account name">
+            <input id="accCoins" type="number" placeholder="coins" style="width:100px">
+            <input id="accStars" type="number" placeholder="stars" style="width:100px">
+            <input id="accTickets" type="number" placeholder="tickets" style="width:100px">
+            <button id="createAccBtn">Create</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>Accounts</h3>
+          <div id="accountsList" class="list"></div>
+        </div>
+
+        <div id="accountPlayArea" class="panel" style="display:none"></div>
+      </section>
+
+      <!-- TRADE MODE placeholder -->
+      <section id="tradePanel" class="panel" style="display:none">
+        <h2 style="margin-top:0">Trade Mode</h2>
+        <div class="muted">Will implement after create/play flow is solid.</div>
+      </section>
+    </div>
+
+    <div class="col">
+      <div class="panel">
+        <h3>Persistence & Tools</h3>
+        <div class="muted">Data stored in localStorage under <code>item_game_v2</code></div>
+        <div style="margin-top:8px" class="row">
+          <button id="exportBtn">Export</button>
+          <button id="importBtn">Import</button>
+          <button id="resetBtn">Reset</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Log</h3>
+        <div id="log" class="list"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div id="modalRoot" style="display:none"></div>
+
+<script>
+// Single-file fixed implementation. Cleaner event wiring to avoid nested attribute parsing bugs.
+const STORAGE_KEY = 'item_game_v2';
+let game = { shops: [], gachas: [], accounts: [], nextId: 1 };
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) game = JSON.parse(raw);
+  } catch (e) {
+    console.error('load error', e);
+  }
+}
+function save() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(game));
+  renderAll();
+}
+function uid() { return 'id' + (game.nextId++); }
+
+// Lightweight element helper — does NOT rely on parsing inline handler strings.
+function createEl(tag, options = {}) {
+  const el = document.createElement(tag);
+  if (options.class) el.className = options.class;
+  if (options.text) el.textContent = options.text;
+  if (options.html) el.innerHTML = options.html;
+  if (options.attrs) Object.keys(options.attrs).forEach(k => el.setAttribute(k, options.attrs[k]));
+  if (options.children) options.children.forEach(c => el.appendChild(c));
+  if (options.on) Object.keys(options.on).forEach(k => el.addEventListener(k, options.on[k]));
+  return el;
+}
+
+function log(msg) {
+  const l = document.getElementById('log');
+  const d = createEl('div', { text: new Date().toLocaleTimeString() + ': ' + msg });
+  l.prepend(d);
+}
+
+function findShop(id) { return game.shops.find(s => s.id === id); }
+function findGacha(id) { return game.gachas.find(g => g.id === id); }
+function findAccount(id) { return game.accounts.find(a => a.id === id); }
+function findTemplate(tid) {
+  for (const s of game.shops) {
+    const it = (s.items || []).find(i => i.id === tid);
+    if (it) return { source: 'shop', parentId: s.id, item: it };
+  }
+  for (const g of game.gachas) {
+    const it = (g.items || []).find(i => i.id === tid);
+    if (it) return { source: 'gacha', parentId: g.id, item: it };
+  }
+  return null;
+}
+
+// Tabs
+document.querySelectorAll('.tab').forEach(btn => btn.addEventListener('click', () => {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  const tab = btn.dataset.tab;
+  document.getElementById('createPanel').style.display = tab === 'create' ? 'block' : 'none';
+  document.getElementById('playPanel').style.display = tab === 'play' ? 'block' : 'none';
+  document.getElementById('tradePanel').style.display = tab === 'trade' ? 'block' : 'none';
+}));
+
+// Render lists
+function renderCreateLists() {
+  const shopsDiv = document.getElementById('shopsList');
+  shopsDiv.innerHTML = '';
+  if (!game.shops || game.shops.length === 0) shopsDiv.appendChild(createEl('div', { class: 'muted', text: 'No shops yet.' }));
+  (game.shops || []).forEach(s => {
+    const row = createEl('div', { class: 'boxed' });
+    const titleRow = createEl('div', { class: 'row' });
+    titleRow.appendChild(createEl('strong', { text: s.name }));
+    titleRow.appendChild(createEl('div', { attrs: { style: 'flex:1' } }));
+    const editBtn = createEl('button', { text: 'Edit' }); editBtn.addEventListener('click', () => editShop(s.id));
+    const delBtn = createEl('button', { text: 'Delete' }); delBtn.addEventListener('click', () => { if (confirm('Delete shop?')) { game.shops = game.shops.filter(x => x.id !== s.id); save(); log('Shop deleted'); } });
+    const togBtn = createEl('button', { text: s.active ? 'Deactivate' : 'Activate' }); togBtn.addEventListener('click', () => { s.active = !s.active; save(); });
+    titleRow.appendChild(editBtn); titleRow.appendChild(delBtn); titleRow.appendChild(togBtn);
+    row.appendChild(titleRow);
+    shopsDiv.appendChild(row);
+  });
+
+  const gachaDiv = document.getElementById('gachasList');
+  gachaDiv.innerHTML = '';
+  if (!game.gachas || game.gachas.length === 0) gachaDiv.appendChild(createEl('div', { class: 'muted', text: 'No gachas yet.' }));
+  (game.gachas || []).forEach(g => {
+    const row = createEl('div', { class: 'boxed' });
+    const titleRow = createEl('div', { class: 'row' });
+    titleRow.appendChild(createEl('strong', { text: g.name }));
+    titleRow.appendChild(createEl('div', { attrs: { style: 'flex:1' } }));
+    titleRow.appendChild(createEl('div', { class: 'muted', text: `1x:${g.price1||0} 5x:${g.price5||0} (${g.currency||'coins'})` }));
+    const editBtn = createEl('button', { text: 'Edit' }); editBtn.addEventListener('click', () => editGacha(g.id));
+    const delBtn = createEl('button', { text: 'Delete' }); delBtn.addEventListener('click', () => { if (confirm('Delete gacha?')) { game.gachas = game.gachas.filter(x => x.id !== g.id); save(); log('Gacha deleted'); } });
+    const togBtn = createEl('button', { text: g.active ? 'Deactivate' : 'Activate' }); togBtn.addEventListener('click', () => { g.active = !g.active; save(); });
+    titleRow.appendChild(editBtn); titleRow.appendChild(delBtn); titleRow.appendChild(togBtn);
+    row.appendChild(titleRow);
+    gachaDiv.appendChild(row);
+  });
+}
+
+// Create handlers
+const createShopBtn = document.getElementById('createShopBtn');
+createShopBtn.addEventListener('click', () => {
+  const nameInput = document.getElementById('newShopName');
+  const name = (nameInput.value || '').trim();
+  if (!name) return alert('Enter shop name');
+  game.shops.push({ id: uid(), name, active: true, items: [] });
+  nameInput.value = '';
+  save();
+  log('Shop created: ' + name);
+});
+
+const createGachaBtn = document.getElementById('createGachaBtn');
+createGachaBtn.addEventListener('click', () => {
+  const nameInput = document.getElementById('newGachaName');
+  const name = (nameInput.value || '').trim();
+  if (!name) return alert('Enter gacha name');
+  const p1 = Number(document.getElementById('newGachaPrice1').value || 0);
+  const p5 = Number(document.getElementById('newGachaPrice5').value || 0);
+  const cur = document.getElementById('newGachaCurrency').value || 'coins';
+  game.gachas.push({ id: uid(), name, price1: p1, price5: p5, currency: cur, active: true, items: [] });
+  nameInput.value = '';
+  document.getElementById('newGachaPrice1').value = '';
+  document.getElementById('newGachaPrice5').value = '';
+  save();
+  log('Gacha created: ' + name);
+});
+
+// Edit shop (shows editor area)
+function editShop(shopId) {
+  const s = findShop(shopId);
+  if (!s) return;
+  const editor = document.getElementById('editorArea');
+  editor.innerHTML = '';
+
+  const wrap = createEl('div', { class: 'panel' });
+  wrap.appendChild(createEl('h3', { text: 'Editing Shop: ' + s.name }));
+
+  const nameRow = createEl('div', { class: 'row' });
+  const nameInput = createEl('input', { attrs: { type: 'text', value: s.name, style: 'flex:1' } });
+  const saveNameBtn = createEl('button', { text: 'Save Name' });
+  saveNameBtn.addEventListener('click', () => {
+    const v = (nameInput.value || '').trim();
+    if (!v) return alert('Name required');
+    s.name = v;
+    save();
+    editor.innerHTML = '';
+    log('Shop renamed');
+  });
+  nameRow.appendChild(nameInput); nameRow.appendChild(saveNameBtn);
+  wrap.appendChild(nameRow);
+
+  // Add item form attached to this shop
+  const addForm = createEl('div', { class: 'panel boxed' });
+  addForm.appendChild(createEl('h4', { text: 'Add Item to Shop' }));
+  const rowInputs = createEl('div', { class: 'row' });
+  const itName = createEl('input', { attrs: { placeholder: 'name', style: 'flex:1' } });
+  const itType = createEl('input', { attrs: { placeholder: 'type', style: 'width:120px' } });
+  rowInputs.appendChild(itName); rowInputs.appendChild(itType);
+  addForm.appendChild(rowInputs);
+  const itDesc = createEl('textarea', { attrs: { placeholder: 'description', rows: 2, style: 'width:100%' } });
+  addForm.appendChild(itDesc);
+  const rowBottom = createEl('div', { class: 'row' });
+  const itValue = createEl('input', { attrs: { type: 'number', placeholder: 'value', style: 'width:100px' } });
+  const itPrice = createEl('input', { attrs: { type: 'number', placeholder: 'price', style: 'width:100px' } });
+  const itCurrency = createEl('select');
+  ['coins','stars','tickets'].forEach(c => itCurrency.appendChild(createEl('option', { attrs: { value: c }, text: c })));
+  const addItemBtn = createEl('button', { text: 'Add Item' });
+  addItemBtn.addEventListener('click', () => {
+    const name = (itName.value || '').trim();
+    if (!name) return alert('Enter item name');
+    const item = {
+      id: uid(),
+      name,
+      type: (itType.value || '').trim(),
+      desc: (itDesc.value || '').trim(),
+      value: Number(itValue.value || 0),
+      price: Number(itPrice.value || 0),
+      currency: itCurrency.value || 'coins'
+    };
+    s.items = s.items || [];
+    s.items.push(item);
+    itName.value = ''; itType.value = ''; itDesc.value = ''; itValue.value = ''; itPrice.value = '';
+    save();
+    editShop(shopId);
+    log('Item added to shop: ' + item.name);
+  });
+  rowBottom.appendChild(itValue); rowBottom.appendChild(itPrice); rowBottom.appendChild(itCurrency); rowBottom.appendChild(addItemBtn);
+  addForm.appendChild(rowBottom);
+  wrap.appendChild(addForm);
+
+  // Items list
+  const itemsWrap = createEl('div');
+  itemsWrap.appendChild(createEl('h4', { text: 'Items in this Shop' }));
+  if (!s.items || s.items.length === 0) itemsWrap.appendChild(createEl('div', { class: 'muted', text: 'No items' }));
+  (s.items || []).forEach(it => {
+    const r = createEl('div', { class: 'boxed' });
+    const row = createEl('div', { class: 'row' });
+    row.appendChild(createEl('div', { text: it.name + (it.price ? ' — ' + it.price + ' ' + it.currency : '') }));
+    row.appendChild(createEl('div', { attrs: { style: 'flex:1' } }));
+    const editBtn = createEl('button', { text: 'Edit' });
+    editBtn.addEventListener('click', () => editShopItem(s.id, it.id));
+    const delBtn = createEl('button', { text: 'Delete' });
+    delBtn.addEventListener('click', () => {
+      if (!confirm('Delete this item template? (existing inventory instances will show as "missing")')) return;
+      s.items = s.items.filter(x => x.id !== it.id);
+      save();
+      editShop(shopId);
+      log('Item template deleted');
+    });
+    row.appendChild(editBtn); row.appendChild(delBtn);
+    r.appendChild(row);
+    itemsWrap.appendChild(r);
+  });
+  wrap.appendChild(itemsWrap);
+  editor.appendChild(wrap);
+}
+
+function editShopItem(shopId, itemId) {
+  const s = findShop(shopId);
+  if (!s) return;
+  const item = (s.items || []).find(x => x.id === itemId);
+  if (!item) return;
+  const modal = createModal();
+  const box = createEl('div');
+  box.appendChild(createEl('h3', { text: 'Edit Item Template' }));
+  const nameInput = createEl('input', { attrs: { value: item.name, style: 'width:100%' } });
+  const typeInput = createEl('input', { attrs: { value: item.type, style: 'width:100%' } });
+  const descInput = createEl('textarea', { attrs: { rows: 3, style: 'width:100%' }, text: item.desc });
+  const valInput = createEl('input', { attrs: { type: 'number', value: item.value } });
+  const priceInput = createEl('input', { attrs: { type: 'number', value: item.price } });
+  const curSelect = createEl('select'); ['coins','stars','tickets'].forEach(c => { const opt = createEl('option', { attrs: { value: c }, text: c }); if (item.currency === c) opt.selected = true; curSelect.appendChild(opt); });
+  box.appendChild(nameInput); box.appendChild(typeInput); box.appendChild(descInput);
+  const row = createEl('div', { class: 'row' });
+  row.appendChild(valInput); row.appendChild(priceInput); row.appendChild(curSelect);
+  box.appendChild(row);
+  const btnRow = createEl('div', { class: 'row' });
+  const saveBtn = createEl('button', { text: 'Save' });
+  saveBtn.addEventListener('click', () => {
+    item.name = (nameInput.value || '').trim();
+    item.type = (typeInput.value || '').trim();
+    item.desc = (descInput.value || '').trim();
+    item.value = Number(valInput.value || 0);
+    item.price = Number(priceInput.value || 0);
+    item.currency = curSelect.value || 'coins';
+    save();
+    closeModal(modal);
+    editShop(shopId);
+    log('Item template updated');
+  });
+  const cancelBtn = createEl('button', { text: 'Cancel' }); cancelBtn.addEventListener('click', () => closeModal(modal));
+  btnRow.appendChild(saveBtn); btnRow.appendChild(cancelBtn);
+  box.appendChild(btnRow);
+  modal.querySelector('.modal').appendChild(box);
+}
+
+// Edit gacha
+function editGacha(gachaId) {
+  const g = findGacha(gachaId);
+  if (!g) return;
+  const editor = document.getElementById('editorArea'); editor.innerHTML = '';
+  const wrap = createEl('div', { class: 'panel' });
+  wrap.appendChild(createEl('h3', { text: 'Editing Gacha: ' + g.name }));
+
+  const nameRow = createEl('div', { class: 'row' });
+  const nameInput = createEl('input', { attrs: { type: 'text', value: g.name, style: 'flex:1' } });
+  const curSelect = createEl('select'); ['coins','stars','tickets'].forEach(c => { const opt = createEl('option', { attrs: { value: c }, text: c }); if (g.currency === c) opt.selected = true; curSelect.appendChild(opt); });
+  const p1 = createEl('input', { attrs: { type: 'number', value: g.price1 || 0, style: 'width:110px' } });
+  const p5 = createEl('input', { attrs: { type: 'number', value: g.price5 || 0, style: 'width:110px' } });
+  const saveBtn = createEl('button', { text: 'Save' });
+  saveBtn.addEventListener('click', () => {
+    const v = (nameInput.value || '').trim(); if (!v) return alert('Name required');
+    g.name = v; g.price1 = Number(p1.value || 0); g.price5 = Number(p5.value || 0); g.currency = curSelect.value || 'coins';
+    save(); editor.innerHTML = '';
+    log('Gacha updated');
+  });
+  nameRow.appendChild(nameInput); nameRow.appendChild(curSelect); nameRow.appendChild(p1); nameRow.appendChild(p5); nameRow.appendChild(saveBtn);
+  wrap.appendChild(nameRow);
+
+  // add gacha item
+  const addForm = createEl('div', { class: 'panel boxed' });
+  addForm.appendChild(createEl('h4', { text: 'Add Item to Gacha' }));
+  const itName = createEl('input', { attrs: { placeholder: 'name', style: 'flex:1' } });
+  const itType = createEl('input', { attrs: { placeholder: 'type', style: 'width:120px' } });
+  addForm.appendChild(createEl('div', { class: 'row', children: [itName, itType] }));
+  const itDesc = createEl('textarea', { attrs: { placeholder: 'description', rows: 2, style: 'width:100%' } });
+  addForm.appendChild(itDesc);
+  const itValue = createEl('input', { attrs: { type: 'number', placeholder: 'value', style: 'width:100px' } });
+  const itChance = createEl('input', { attrs: { type: 'number', placeholder: 'chance (1-100)', style: 'width:120px' } });
+  const addItemBtn = createEl('button', { text: 'Add Item' });
+  addItemBtn.addEventListener('click', () => {
+    const name = (itName.value || '').trim(); const chance = Number(itChance.value || 0);
+    if (!name) return alert('Name required'); if (!(chance > 0 && chance <= 100)) return alert('Chance 1-100');
+    const item = { id: uid(), name, type: (itType.value || '').trim(), desc: (itDesc.value || '').trim(), value: Number(itValue.value || 0), chance };
+    g.items = g.items || [];
+    g.items.push(item);
+    itName.value = ''; itType.value = ''; itDesc.value = ''; itValue.value = ''; itChance.value = '';
+    save(); editGacha(gachaId); log('Gacha item added');
+  });
+  addForm.appendChild(createEl('div', { class: 'row', children: [itValue, itChance, addItemBtn] }));
+  wrap.appendChild(addForm);
+
+  // items list with total chance
+  const itemsWrap = createEl('div');
+  itemsWrap.appendChild(createEl('h4', { text: 'Items in this Gacha' }));
+  const total = (g.items || []).reduce((s, i) => s + (Number(i.chance) || 0), 0);
+  itemsWrap.appendChild(createEl('div', { class: 'muted', text: 'Total chance: ' + total + '% ' + (Math.round(total) !== 100 ? ' — (should equal 100%)' : '') }));
+  if (!g.items || g.items.length === 0) itemsWrap.appendChild(createEl('div', { class: 'muted', text: 'No items' }));
+  (g.items || []).forEach(it => {
+    const r = createEl('div', { class: 'boxed' });
+    const row = createEl('div', { class: 'row' });
+    row.appendChild(createEl('div', { text: it.name + ' (' + (it.chance || 0) + '%)' }));
+    row.appendChild(createEl('div', { attrs: { style: 'flex:1' } }));
+    const editBtn = createEl('button', { text: 'Edit' }); editBtn.addEventListener('click', () => editGachaItem(g.id, it.id));
+    const delBtn = createEl('button', { text: 'Delete' }); delBtn.addEventListener('click', () => { if (!confirm('Delete this item template? (existing inventory instances will show as "missing")')) return; g.items = g.items.filter(x => x.id !== it.id); save(); editGacha(gachaId); log('Gacha item deleted'); });
+    row.appendChild(editBtn); row.appendChild(delBtn);
+    r.appendChild(row);
+    itemsWrap.appendChild(r);
+  });
+  wrap.appendChild(itemsWrap);
+  editor.appendChild(wrap);
+}
+
+function editGachaItem(gId, itemId) {
+  const g = findGacha(gId); if (!g) return; const it = (g.items || []).find(x => x.id === itemId); if (!it) return;
+  const modal = createModal(); const box = createEl('div');
+  box.appendChild(createEl('h3', { text: 'Edit Gacha Item' }));
+  const nameInput = createEl('input', { attrs: { value: it.name, style: 'width:100%' } });
+  const typeInput = createEl('input', { attrs: { value: it.type, style: 'width:100%' } });
+  const descInput = createEl('textarea', { attrs: { rows: 3, style: 'width:100%' }, text: it.desc });
+  const valInput = createEl('input', { attrs: { type: 'number', value: it.value || 0 } });
+  const chanceInput = createEl('input', { attrs: { type: 'number', value: it.chance || 0 } });
+  box.appendChild(nameInput); box.appendChild(typeInput); box.appendChild(descInput);
+  box.appendChild(createEl('div', { class: 'row', children: [valInput, chanceInput] }));
+  const saveBtn = createEl('button', { text: 'Save' }); saveBtn.addEventListener('click', () => {
+    it.name = (nameInput.value || '').trim(); it.type = (typeInput.value || '').trim(); it.desc = (descInput.value || '').trim(); it.value = Number(valInput.value || 0); it.chance = Number(chanceInput.value || 0);
+    if (!(it.chance > 0 && it.chance <= 100)) return alert('Chance must be 1-100');
+    save(); closeModal(modal); editGacha(gId); log('Gacha item updated');
+  });
+  const cancelBtn = createEl('button', { text: 'Cancel' }); cancelBtn.addEventListener('click', () => closeModal(modal));
+  box.appendChild(createEl('div', { class: 'row', children: [saveBtn, cancelBtn] }));
+  modal.querySelector('.modal').appendChild(box);
+}
+
+// PLAY MODE
+function renderAccounts() {
+  const list = document.getElementById('accountsList'); list.innerHTML = '';
+  if (!game.accounts || game.accounts.length === 0) list.appendChild(createEl('div', { class: 'muted', text: 'No accounts yet.' }));
+  (game.accounts || []).forEach(a => {
+    const row = createEl('div', { class: 'boxed' });
+    const r = createEl('div', { class: 'row' });
+    r.appendChild(createEl('strong', { text: a.name }));
+    r.appendChild(createEl('div', { attrs: { style: 'flex:1' } }));
+    const c1 = createEl('div', { class: 'currency', text: 'Coins: ' + ((a.currencies && a.currencies.coins) || 0) }); c1.addEventListener('click', () => editCurrency(a.id, 'coins'));
+    const c2 = createEl('div', { class: 'currency', text: 'Stars: ' + ((a.currencies && a.currencies.stars) || 0) }); c2.addEventListener('click', () => editCurrency(a.id, 'stars'));
+    const c3 = createEl('div', { class: 'currency', text: 'Tickets: ' + ((a.currencies && a.currencies.tickets) || 0) }); c3.addEventListener('click', () => editCurrency(a.id, 'tickets'));
+    const playBtn = createEl('button', { text: 'Play' }); playBtn.addEventListener('click', () => openAccount(a.id));
+    const delBtn = createEl('button', { text: 'Delete' }); delBtn.addEventListener('click', () => { if (!confirm('Delete account?')) return; game.accounts = game.accounts.filter(x => x.id !== a.id); save(); log('Account deleted'); });
+    r.appendChild(c1); r.appendChild(c2); r.appendChild(c3); r.appendChild(playBtn); r.appendChild(delBtn);
+    row.appendChild(r); list.appendChild(row);
+  });
+}
+
+const createAccBtn = document.getElementById('createAccBtn');
+createAccBtn.addEventListener('click', () => {
+  const name = (document.getElementById('accName').value || '').trim(); if (!name) return alert('Enter name');
+  const ac = { id: uid(), name, currencies: { coins: Number(document.getElementById('accCoins').value || 0), stars: Number(document.getElementById('accStars').value || 0), tickets: Number(document.getElementById('accTickets').value || 0) }, inventory: [] };
+  game.accounts = game.accounts || [];
+  game.accounts.push(ac);
+  document.getElementById('accName').value = '';
+  document.getElementById('accCoins').value = '0'; document.getElementById('accStars').value = '0'; document.getElementById('accTickets').value = '0';
+  save(); log('Account created: ' + ac.name);
+});
+
+let currentAccountId = null;
+function openAccount(id) {
+  currentAccountId = id;
+  const a = findAccount(id);
+  if (!a) return;
+  const playArea = document.getElementById('accountPlayArea'); playArea.innerHTML = '';
+  const header = createEl('div'); header.appendChild(createEl('div', { class: 'row', children: [ createEl('h3', { text: a.name }), createEl('div', { attrs: { style: 'flex:1' } }), createEl('div', { class: 'muted', text: 'Total value: ' + calcTotalValue(a) }) ] }));
+  playArea.appendChild(header);
+  playArea.appendChild(createEl('div', { class: 'row', children: [ createEl('button', { text: 'Open Shop/Gacha', on: { click: () => openShopGachaPopup() } }) ] }));
+
+  playArea.appendChild(createEl('h4', { text: 'Inventory' }));
+  const invBox = createEl('div', { class: 'list boxed', attrs: { style: 'max-height:300px;overflow:auto' } });
+  const resolved = (a.inventory || []).map(inst => { const t = findTemplate(inst.templateId); return { uid: inst.uid, name: t ? t.item.name : '(missing)', desc: t ? t.item.desc : 'Template removed', value: t ? t.item.value : 0 }; }).sort((x, y) => x.name.localeCompare(y.name));
+  if (resolved.length === 0) invBox.appendChild(createEl('div', { class: 'muted', text: 'Inventory empty' }));
+  resolved.forEach(it => invBox.appendChild(createEl('div', { class: 'boxed', children: [ createEl('div', { class: 'row', children: [ createEl('div', { children: [ createEl('strong', { text: it.name }) ] }), createEl('div', { attrs: { style: 'flex:1' } }), createEl('div', { text: 'Value: ' + (it.value || 0) }) ] }), createEl('div', { text: it.desc }) ] })));
+  playArea.appendChild(invBox);
+  playArea.appendChild(createEl('div', { class: 'row', children: [ createEl('button', { text: 'Quick Delete', on: { click: () => quickDelete(currentAccountId) } }), createEl('button', { text: 'Close', on: { click: () => { currentAccountId = null; playArea.style.display = 'none'; } } }) ] }));
+  playArea.style.display = 'block'; playArea.scrollIntoView(); renderAccounts();
+}
+
+function calcTotalValue(account) {
+  return (account.inventory || []).reduce((s, inst) => {
+    const t = findTemplate(inst.templateId);
+    return s + (t ? Number(t.item.value || 0) : 0);
+  }, 0);
+}
+
+function editCurrency(accountId, cur) {
+  const a = findAccount(accountId);
+  if (!a) return;
+  const modal = createModal();
+  const box = createEl('div');
+  box.appendChild(createEl('h3', { text: 'Edit ' + cur }));
+  const input = createEl('input', { attrs: { type: 'number', value: (a.currencies && a.currencies[cur]) || 0 } });
+  box.appendChild(input);
+  const saveBtn = createEl('button', { text: 'Save' }); saveBtn.addEventListener('click', () => { a.currencies[cur] = Number(input.value || 0); save(); closeModal(modal); openAccount(accountId); log('Currency edited for ' + a.name); });
+  const cancelBtn = createEl('button', { text: 'Cancel' }); cancelBtn.addEventListener('click', () => closeModal(modal));
+  box.appendChild(createEl('div', { class: 'row', children: [saveBtn, cancelBtn] }));
+  modal.querySelector('.modal').appendChild(box);
+}
+
+function openShopGachaPopup() {
+  const modal = createModal();
+  const box = createEl('div'); box.appendChild(createEl('h3', { text: 'Active Shops & Gachas' }));
+  const activeShops = (game.shops || []).filter(s => s.active);
+  const activeGachas = (game.gachas || []).filter(g => g.active);
+  if (activeShops.length === 0 && activeGachas.length === 0) box.appendChild(createEl('div', { class: 'muted', text: 'No active shops/gachas' }));
+  activeShops.forEach(s => { const row = createEl('div', { class: 'boxed' }); const r = createEl('div', { class: 'row' }); r.appendChild(createEl('strong', { text: s.name })); r.appendChild(createEl('div', { attrs: { style: 'flex:1' } })); const openBtn = createEl('button', { text: 'Open' }); openBtn.addEventListener('click', () => showShopBuy(s.id, modal)); r.appendChild(openBtn); row.appendChild(r); box.appendChild(row); });
+  activeGachas.forEach(g => { const row = createEl('div', { class: 'boxed' }); const r = createEl('div', { class: 'row' }); r.appendChild(createEl('strong', { text: g.name + ' (' + g.currency + ')' })); r.appendChild(createEl('div', { attrs: { style: 'flex:1' } })); r.appendChild(createEl('div', { class: 'muted', text: '1x:' + (g.price1 || 0) + ' 5x:' + (g.price5 || 0) })); const openBtn = createEl('button', { text: 'Open' }); openBtn.addEventListener('click', () => showGachaRoll(g.id, modal)); r.appendChild(openBtn); row.appendChild(r); box.appendChild(row); });
+  modal.querySelector('.modal').appendChild(box);
+}
+
+function showShopBuy(shopId, parentModal) {
+  const s = findShop(shopId); if (!s) return;
+  const acc = findAccount(currentAccountId); if (!acc) return alert('No account open');
+  const modal = createModal(); const box = createEl('div'); box.appendChild(createEl('h3', { text: 'Shop: ' + s.name }));
+  if (!s.items || s.items.length === 0) box.appendChild(createEl('div', { class: 'muted', text: 'No items' }));
+  (s.items || []).forEach(it => {
+    const row = createEl('div', { class: 'boxed' }); const r = createEl('div', { class: 'row' }); const left = createEl('div'); left.appendChild(createEl('strong', { text: it.name })); left.appendChild(createEl('div', { class: 'muted', text: it.desc || '' })); r.appendChild(left); r.appendChild(createEl('div', { attrs: { style: 'flex:1' } })); r.appendChild(createEl('div', { text: (it.price || 0) + ' ' + (it.currency || 'coins') })); const buyBtn = createEl('button', { text: 'Buy' }); buyBtn.addEventListener('click', () => {
+      if ((acc.currencies && acc.currencies[it.currency] || 0) >= (it.price || 0)) {
+        acc.currencies[it.currency] = (acc.currencies[it.currency] || 0) - (it.price || 0);
+        acc.inventory = acc.inventory || [];
+        acc.inventory.push({ uid: uid(), templateId: it.id, source: 'shop', parentId: s.id });
+        save(); closeModal(modal); closeModal(parentModal); openAccount(acc.id); log(acc.name + ' bought ' + it.name); alert('Bought ' + it.name);
+      } else alert('Not enough ' + it.currency);
+    });
+    r.appendChild(buyBtn); row.appendChild(r); box.appendChild(row);
+  });
+  modal.querySelector('.modal').appendChild(box);
+}
+
+function showGachaRoll(gid, parentModal) {
+  const g = findGacha(gid); if (!g) return;
+  const acc = findAccount(currentAccountId); if (!acc) return alert('No account open');
+  const modal = createModal(); const box = createEl('div'); box.appendChild(createEl('h3', { text: 'Gacha: ' + g.name + ' (' + g.currency + ')' })); box.appendChild(createEl('div', { class: 'muted', text: 'Items and chances:' }));
+  if (!g.items || g.items.length === 0) box.appendChild(createEl('div', { class: 'muted', text: 'No items' }));
+  (g.items || []).forEach(it => box.appendChild(createEl('div', { class: 'boxed', children: [ createEl('div', { class: 'row', children: [ createEl('strong', { text: it.name }), createEl('div', { attrs: { style: 'flex:1' } }), createEl('div', { class: 'muted', text: (it.chance || 0) + '%' }) ] }) ] })));
+
+  function doRolls(n) {
+    const price = n === 1 ? g.price1 : g.price5;
+    if ((acc.currencies && acc.currencies[g.currency] || 0) < price) return alert('Not enough ' + g.currency);
+    const total = (g.items || []).reduce((s, i) => s + (Number(i.chance) || 0), 0);
+    if (Math.round(total) !== 100) return alert('Gacha chances invalid (sum != 100)');
+    acc.currencies[g.currency] = (acc.currencies[g.currency] || 0) - price;
+    const results = [];
+    for (let i = 0; i < n; i++) {
+      const chosen = sampleByChance(g.items);
+      acc.inventory = acc.inventory || [];
+      acc.inventory.push({ uid: uid(), templateId: chosen.id, source: 'gacha', parentId: g.id });
+      results.push(chosen);
+    }
+    save(); closeModal(modal); closeModal(parentModal); openAccount(acc.id);
+    const rmodal = createModal(); const rbox = createEl('div'); rbox.appendChild(createEl('h3', { text: `You got (${n})` })); results.forEach(r => rbox.appendChild(createEl('div', { text: r.name + (r.chance ? ' — ' + r.chance + '%' : '') }))); rbox.appendChild(createEl('div', { class: 'row', children: [ createEl('button', { text: 'OK', on: { click: () => closeModal(rmodal) } }) ] })); rmodal.querySelector('.modal').appendChild(rbox);
+    log(acc.name + ' rolled ' + n + 'x on ' + g.name);
+  }
+
+  const rollRow = createEl('div', { class: 'row' });
+  const r1 = createEl('button', { text: 'Roll 1 (' + (g.price1 || 0) + ' ' + g.currency + ')' }); r1.addEventListener('click', () => doRolls(1));
+  const r5 = createEl('button', { text: 'Roll 5 (' + (g.price5 || 0) + ' ' + g.currency + ')' }); r5.addEventListener('click', () => doRolls(5));
+  rollRow.appendChild(r1); rollRow.appendChild(r5);
+  box.appendChild(rollRow);
+  modal.querySelector('.modal').appendChild(box);
+}
+
+function sampleByChance(items) {
+  const total = (items || []).reduce((s, i) => s + (Number(i.chance) || 0), 0);
+  if (Math.round(total) !== 100) return null;
+  const r = Math.random() * 100; let cum = 0;
+  for (const it of items) { cum += Number(it.chance) || 0; if (r < cum) return it; }
+  return (items || [])[items.length - 1];
+}
+
+function quickDelete(accountId) {
+  const a = findAccount(accountId); if (!a) return;
+  const modal = createModal(); const box = createEl('div'); box.appendChild(createEl('h3', { text: 'Quick Delete' })); box.appendChild(createEl('div', { class: 'muted', text: 'Select instances to delete (each instance listed separately)' }));
+  const list = createEl('div', { attrs: { style: 'max-height:300px;overflow:auto;margin-top:8px' } });
+  const resolved = (a.inventory || []).map(inst => ({ uid: inst.uid, label: (findTemplate(inst.templateId) ? findTemplate(inst.templateId).item.name : '(missing)') })).sort((x, y) => x.label.localeCompare(y.label));
+  if (resolved.length === 0) list.appendChild(createEl('div', { class: 'muted', text: 'No items' }));
+  resolved.forEach((it, idx) => {
+    const row = createEl('div', { class: 'row' });
+    const cb = createEl('input', { attrs: { type: 'checkbox', id: 'qd_' + idx } });
+    row.appendChild(cb); row.appendChild(createEl('label', { text: it.label })); list.appendChild(row);
+  });
+  box.appendChild(list);
+  const actions = createEl('div', { class: 'row' });
+  const delBtn = createEl('button', { text: 'Delete Selected' });
+  delBtn.addEventListener('click', () => {
+    const toRemove = [];
+    resolved.forEach((it, idx) => { const cb = document.getElementById('qd_' + idx); if (cb && cb.checked) toRemove.push(it.uid); });
+    a.inventory = (a.inventory || []).filter(x => !toRemove.includes(x.uid));
+    save(); closeModal(modal); openAccount(accountId); log('Deleted selected items');
+  });
+  const cancelBtn = createEl('button', { text: 'Cancel' }); cancelBtn.addEventListener('click', () => closeModal(modal));
+  actions.appendChild(delBtn); actions.appendChild(cancelBtn); box.appendChild(actions);
+  modal.querySelector('.modal').appendChild(box);
+}
+
+// MODAL HELPERS
+function createModal() {
+  const root = document.getElementById('modalRoot'); root.style.display = 'block';
+  root.innerHTML = '';
+  const back = createEl('div', { class: 'modal-back' });
+  const modal = createEl('div', { class: 'modal' }); back.appendChild(modal); root.appendChild(back);
+  back.addEventListener('click', (ev) => { if (ev.target === back) closeModal(back); });
+  return back;
+}
+function closeModal(elm) { if (elm && elm.parentNode) elm.remove(); const root = document.getElementById('modalRoot'); root.style.display = root.children.length ? 'block' : 'none'; }
+
+// EXPORT/IMPORT/RESET
+document.getElementById('exportBtn').addEventListener('click', () => {
+  const data = JSON.stringify(game, null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'item_game_export.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+});
+
+document.getElementById('importBtn').addEventListener('click', () => {
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'application/json';
+  inp.onchange = e => { const f = e.target.files[0]; const r = new FileReader(); r.onload = ev => { try { const obj = JSON.parse(ev.target.result); if (confirm('Import will replace current data. Continue?')) { game = obj; save(); alert('Imported'); } } catch (err) { alert('Invalid file'); } }; r.readAsText(f); };
+  inp.click();
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  if (!confirm('This will erase saved data. OK?')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  game = { shops: [], gachas: [], accounts: [], nextId: 1 };
+  save();
+  alert('Reset complete');
+});
+
+// INIT
+load(); renderAll(); log('Loaded app — items are created under shop/gacha edit.');
+
+function renderAll() { renderCreateLists(); renderAccounts(); }
+</script>
+</body>
+</html>
